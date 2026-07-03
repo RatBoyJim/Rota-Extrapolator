@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import './App.css';
 import Papa from 'papaparse';
 
@@ -15,16 +15,13 @@ function createInitialDateRow() {
   return initialDateRow;
 }
 
-function createFutureDateRows() {
-  return [];
-}
   
 export default function App() {
   const [rotaOptions, setRotaOptions] = useState([
-    { id: 0, name: 'Main Rota 1', value: 'mainRota1', dutyData: [] }, 
-    { id: 1, name: 'Main Rota 2', value: 'mainRota2', dutyData: [] },
-    { id: 2, name: 'Main Rota 3', value: 'mainRota3', dutyData: [] },
-    { id: 3, name: 'Main Rota 4', value: 'mainRota4', dutyData: [] }
+    { id: 0, name: 'Main Rota 1', value: 'mainRota1', dutyData: [], dateData: [] }, 
+    { id: 1, name: 'Main Rota 2', value: 'mainRota2', dutyData: [], dateData: [] },
+    { id: 2, name: 'Main Rota 3', value: 'mainRota3', dutyData: [], dateData: [] },
+    { id: 3, name: 'Main Rota 4', value: 'mainRota4', dutyData: [], dateData: [] }
   ]);
 
   const [dateRow] = useState(createInitialDateRow);
@@ -71,8 +68,8 @@ export default function App() {
 
   function handleSelectWeek(rowIndex) {
     // console.log('duty selected', duty);
-    console.log('current rota selected', rotaPicked);
-    console.log('rowIndex', rowIndex);
+    // console.log('current rota selected', rotaPicked);
+    // console.log('rowIndex', rowIndex);
     // get the correct week index to set as the new first option
 
     const selectedDutyData = rotaOptions[rotaPicked].dutyData;
@@ -82,28 +79,50 @@ export default function App() {
     const packageAfter = selectedDutyData.slice(rowIndex); // Items from seventh to the end
     const packageBefore = selectedDutyData.slice(0, rowIndex); // Items from first up to seventh
     const combined = [...packageAfter, ...packageBefore]; // Combine the two packages
-
-    console.log('rotaOptions[rotaPicked].dutyData', rotaOptions[rotaPicked].dutyData);
-    console.log('packageAfter', packageAfter);
-    console.log('packageBefore', packageBefore);
-    console.log('combined', [...packageAfter, ...packageBefore]);
     
     handleSetNewStartingWeek(rowIndex, combined); // Call the function to set the new starting week
     return [...packageAfter, ...packageBefore];
   }
 
   function handleSetNewStartingWeek(targetIndex, reorderedDuties) {
+    // 1. Calculate the matching date matrix first using the freshly reordered duties length
+    const dateArray = reorderedDuties.map((_, index) => {
+      if (index === 0) return dateRow; // Week 1 uses base dates
+      return getDatesForWeek(index);   // Subsequent weeks increment by 7 days
+    });
+
+    // 2. Safely update BOTH dutyData and dateData inside the React state setter
     setRotaOptions(prevOptions => 
       prevOptions.map(option => {
-        // Only modify the currently active rota
         if (option.id === Number(rotaPicked)) {
-          return { ...option, dutyData: reorderedDuties };
+          return { 
+            ...option, 
+            dutyData: reorderedDuties,
+            dateData: dateArray // Saves dates cleanly without mutation
+          };
         }
         return option;
       })
     );
-    createFutureDateRows();
-    setStartWeekPicked(true); // show the date rows when a week is selected
+    
+    setStartWeekPicked(true);
+  }
+
+  function getDatesForWeek(weeksToAdd) {
+    // console.log("weeksToAdd: ", weeksToAdd);
+    // console.log("dateRow: ", dateRow);
+    return dateRow.map(dateStr => {
+      if (!dateStr) return ''; // Skip empty cell or week number placeholder
+      
+      // Parse the localized date string back into a Date object
+      const [day, month, year] = dateStr.split('/');
+      const date = new Date(year, month - 1, day);
+      
+      // Add 7 days multiplied by the number of weeks shifted
+      date.setDate(date.getDate() + (weeksToAdd * 7));
+      // console.log(`Original date: ${dateStr}, New date after adding ${weeksToAdd} weeks: ${date.toLocaleDateString()}`);
+      return date.toLocaleDateString();
+    });
   }
 
 
@@ -142,6 +161,39 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
+            {rotaOptions[rotaPicked].dutyData.map((row, rowIndex) => {
+              // Safely look up the corresponding date row from our updated state
+              const matchingDateRow = rotaOptions[rotaPicked].dateData?.[rowIndex];
+
+              return (
+                <React.Fragment key={`week-group-${rowIndex}`}>
+                  {/* Render the Date Row ONLY if a start week has been picked and dates exist */}
+                  {startWeekPicked && matchingDateRow && (
+                    <tr className="date-row" style={{ backgroundColor: '#f0f4f8', fontWeight: 'bold' }}>
+                      <td></td>
+                      {matchingDateRow.map((date, dateIdx) => (
+                        <td key={`date-${dateIdx}`}>{date}</td>
+                      ))}
+                    </tr>
+                  )}
+
+                  {/* The Standard Duty Row */}
+                  <tr className="duty-row">
+                    {row.map((duty, dutyIndex) => (
+                      <td 
+                        key={dutyIndex} 
+                        onClick={() => handleSelectWeek(rowIndex)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {duty}
+                      </td>
+                    ))}
+                  </tr>
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+          {/* <tbody>
             {startWeekPicked ? 
             <tr>
               <td></td>
@@ -155,7 +207,7 @@ export default function App() {
                 ))}
               </tr>
             ))}
-          </tbody>
+          </tbody> */}
         </table>
       ) : (
         rotaPicked !== '' && <p>Loading table data...</p>
